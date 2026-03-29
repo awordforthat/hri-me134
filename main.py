@@ -1,126 +1,73 @@
 from math import sin, cos
 from pylx16a.lx16a import *
-import time
 import math
+import time
 
-from curves import get_test_curves, sample_curve
+import threading
+import sys
+import termios
+import tty
+import time
+import select
+
+from util import advance_keyframe_sequence
+from walk import keyframes as walk_positions
+
 
 LX16A.initialize("/dev/ttyUSB0")
 
-
-LIMITS = {"front": (20, 210), "rear": (150, 240)}
+SERVO_CONFIG = {
+    "left": {
+        "front": {"id": 3, "limits": (120, 220), "home": 150, "squat": 50},
+        "rear": {"id": 2, "limits": (20, 160), "home": 80, "squat": 175},
+        "hip": {"id": 1, "limits": (10, 60), "home": 200, "squat": 200},
+    },
+    "right": {
+        "front": {"id": 6, "limits": (0, 120), "home": 90, "squat": 175},
+        "rear": {"id": 5, "limits": (90, 200), "home": 150, "squat": 55},
+        "hip": {"id": 4, "limits": (55, 120), "home": 80, "squat": 80},
+    },
+}
+SERVO_TEMPERATURE_LIMIT = 45  # degrees Celsius
+servos = {}
 
 try:
-    rear = LX16A(3)
-    front = LX16A(2)
+    for side in SERVO_CONFIG.values():
+        for servo_config in side.values():
+            servo_obj = {}
+            servo_obj["id"] = servo_config["id"]
+            servo_obj["limits"] = servo_config["limits"]
+            servo_obj["home"] = servo_config["home"]
+            servo_obj["squat"] = servo_config["squat"]
+            servo_obj["servo"] = LX16A(servo_config["id"])
+            servos[servo_config["id"]] = servo_obj
+
 except ServoTimeoutError as e:
     print(f"Servo {e.id_} is not responding. Exiting...")
     exit()
 
+left_front = servos[2]
+left_rear = servos[3]
+left_hip = servos[1]
+right_front = servos[5]
+right_rear = servos[4]
+right_hip = servos[6]
 
-import math
-from typing import List, Optional, Tuple, Dict
 
-LIMITS = {
-    "front": (20.0, 210.0),  # degrees
-    "rear": (150.0, 240.0),  # degrees
-}
+def move_solo(servo_num):
+    for servo in servos.values():
+        if servo["id"] != servo_num:
+            servo["servo"].disable_torque()
+
+
+def disable_torque(servo_ids=[1, 2, 3, 4, 5, 6]):
+    for servo in servos.values():
+        if servo["id"] in servo_ids:
+            servo["servo"].disable_torque()
 
 
 def clamp(x: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, x))
-
-
-def wrap_deg_0_360(deg: float) -> float:
-    # Map any degree value into [0, 360)
-    deg = deg % 360.0
-    if deg < 0:
-        deg += 360.0
-    return deg
-
-
-def in_range(deg: float, lo: float, hi: float) -> bool:
-    return lo <= deg <= hi
-
-
-def fivebar_ik_zero_up_limited(
-    x: float,
-    y: float,
-    *,
-    d: float = 27.0,
-    L1: float = 50.0,
-    L2: float = 80.0,
-    R1: float = 50.0,
-    R2: float = 80.0,
-    limits: Dict[str, Tuple[float, float]] = LIMITS,
-    prev_deg: Optional[Tuple[float, float]] = None,  # (front, rear) in degrees
-) -> List[Tuple[float, float]]:
-    """
-    Returns a list of (front_deg, rear_deg) IK solutions that satisfy servo limits.
-    Angle convention: 0° = straight up (+y), positive = CCW (right-hand rule in plane).
-    x,y are in the base frame with A=(0,0), B=(d,0), units match link lengths (mm here).
-    """
-    # Distances from each base joint to target
-    rL = math.hypot(x, y)
-    rR = math.hypot(x - d, y)
-
-    # Reachability of each 2-link chain
-    def reachable(r: float, a: float, b: float) -> bool:
-        return abs(a - b) <= r <= (a + b)
-
-    if not (reachable(rL, L1, L2) and reachable(rR, R1, R2)):
-        return []
-
-    # Bearings measured from +y (zero-up): phi = atan2(dx, dy)
-    phiL = math.atan2(x, y)  # radians
-    phiR = math.atan2(x - d, y)  # radians
-
-    # Law of cosines for shoulder offset angles
-    cL = clamp((L1 * L1 + rL * rL - L2 * L2) / (2.0 * L1 * rL))
-    cR = clamp((R1 * R1 + rR * rR - R2 * R2) / (2.0 * R1 * rR))
-    alphaL = math.acos(cL)  # radians
-    alphaR = math.acos(cR)  # radians
-
-    # Four combinations (elbow up/down on each side)
-    raw = [
-        (phiL + alphaL, phiR + alphaR),
-        (phiL + alphaL, phiR - alphaR),
-        (phiL - alphaL, phiR + alphaR),
-        (phiL - alphaL, phiR - alphaR),
-    ]
-
-    # Convert to degrees in [0,360) and filter by servo limits
-    front_lo, front_hi = limits["front"]
-    rear_lo, rear_hi = limits["rear"]
-
-    sols: List[Tuple[float, float]] = []
-    for tL_rad, tR_rad in raw:
-        front_deg = wrap_deg_0_360(math.degrees(tL_rad))
-        rear_deg = wrap_deg_0_360(math.degrees(tR_rad))
-
-        if in_range(front_deg, front_lo, front_hi) and in_range(
-            rear_deg, rear_lo, rear_hi
-        ):
-            sols.append((front_deg, rear_deg))
-
-    # Prefer the solution closest to previous angles (if provided)
-    if prev_deg and sols:
-        pf, pr = prev_deg
-
-        def ang_dist(a: float, b: float) -> float:
-            # distance on a circle (0..360 wrap)
-            diff = abs(a - b) % 360.0
-            return min(diff, 360.0 - diff)
-
-        sols.sort(key=lambda s: ang_dist(s[0], pf) + ang_dist(s[1], pr))
-
-    return sols
-
-
-t = 0
-
-
-import math
 
 
 def servo_sin_cos(t):
@@ -146,15 +93,6 @@ def servo_sin_cos(t):
     return front, rear
 
 
-target_front = 0
-target_rear = 0
-front.move(0)
-rear.move(0)
-time.sleep(1)
-
-import math
-
-
 def servo_pingpong(t, x, y):
     """
     Returns an angle that oscillates sinusoidally between x and y.
@@ -172,20 +110,148 @@ def servo_pingpong(t, x, y):
     return angle
 
 
-while True:
-    t += 0.05
+def home(ids=[1, 2, 3, 4, 5, 6], duration=500):
+    for servo in servos.values():
+        if servo["id"] in ids:
+            servo["servo"].move(servo["home"], duration)
 
-    # This produces a movement that keeps the foot in a straight vertical line  up and down.
-    # front_angle = servo_pingpong(t, 0, 120)
-    # rear_angle = servo_pingpong(t + math.pi, 0, 100)  # rear lags front by pi radians
 
-    # This moves the foot in a circular pattern
-    front_angle = servo_pingpong(t, 0, 120)
-    rear_angle = servo_pingpong(t + math.pi / 2, 0, 100)
+def squat(duration=3000):
+    breakpoint()
+    left_front["servo"].move(left_front["squat"], duration, wait=True)
+    left_rear["servo"].move(left_rear["squat"], duration, wait=True)
+    right_front["servo"].move(right_front["squat"], duration, wait=True)
+    right_rear["servo"].move(right_rear["squat"], duration, wait=True)
 
-    rear_angle = clamp(rear_angle, 0, 100)
-    front.move(int(front_angle))
-    rear.move(int(rear_angle))
-    # front.move_start()
-    # rear.move_start()
-    time.sleep(0.05)
+    start_servos()
+
+
+def start_servos(ids=[1, 2, 3, 4, 5, 6]):
+    for servo in servos.values():
+        if servo["id"] in ids and servo["servo"]._waiting_for_move:
+            servo["servo"].move_start()
+
+
+print_positions_requested = False
+print_request_lock = threading.Lock()
+
+
+def print_servo_positions():
+    right_hip_pos = right_hip["servo"].get_physical_angle()
+    left_hip_pos = left_hip["servo"].get_physical_angle()
+    right_front_pos = right_front["servo"].get_physical_angle()
+    left_front_pos = left_front["servo"].get_physical_angle()
+    right_rear_pos = right_rear["servo"].get_physical_angle()
+    left_rear_pos = left_rear["servo"].get_physical_angle()
+    print("left_front: ", left_front_pos)
+    print("left_rear: ", left_rear_pos)
+
+    print()
+
+
+def request_print_servo_positions():
+    global print_positions_requested
+    with print_request_lock:
+        print_positions_requested = True
+
+
+def consume_print_request():
+    global print_positions_requested
+    with print_request_lock:
+        was_requested = print_positions_requested
+        print_positions_requested = False
+    return was_requested
+
+
+def on_space():
+    request_print_servo_positions()
+
+
+def key_listener():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    try:
+        tty.setcbreak(fd)
+        while True:
+            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                ch = sys.stdin.read(1)
+                if ch == " ":
+                    on_space()
+            time.sleep(0.01)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+threading.Thread(target=key_listener, daemon=True).start()
+
+
+def check_temperature():
+    for servo in servos.values():
+        temp = servo["servo"].get_temp()
+        if temp > SERVO_TEMPERATURE_LIMIT:
+            raise Exception(f"Servo {servo['id']} is overheating")
+
+
+# This produces a movement that keeps the foot in a straight vertical line  up and down.
+# front_angle = servo_pingpong(t, 0, 120)
+# rear_angle = servo_pingpong(t + math.pi, 0, 100)  # rear lags front by pi radians
+
+# This moves the foot in a circular pattern
+# front_angle = servo_pingpong(t, 0, 120)
+
+# rear_angle = servo_pingpong(t + math.pi / 2, 0, 100)
+
+
+TIME_STEP = 0.05
+t = 0
+walk_step_num = 0
+
+try:
+    home()
+    time.sleep(1)
+    # disable_torque()
+    while True:
+
+        check_temperature()
+
+        if consume_print_request():
+            print_servo_positions()
+
+        sequence_complete, walk_step_num = advance_keyframe_sequence(
+            {
+                "right_hip": right_hip,
+                "left_hip": left_hip,
+                "right_front": right_front,
+                "left_front": left_front,
+                "right_rear": right_rear,
+                "left_rear": left_rear,
+            },
+            walk_positions,
+            step_num=walk_step_num,
+            t=t,
+            time_step=TIME_STEP,
+            speed_factor=0.25,
+        )
+
+        # right_hip_angle = servo_pingpong(t, right_hip["limits"][0], right_hip["limits"][1])
+        # print(right_hip_angle)
+        # right_hip["servo"].move(right_hip_angle, 100)
+        # left_front_angle = servo_pingpong(t, left_front["limits"][0], left_front["limits"][1])
+        # left_rear_angle = servo_pingpong(t - math.pi/4, left_rear["limits"][0], left_rear["limits"][1])
+        # right_front_angle = servo_pingpong(t + math.pi, right_front["limits"][0], right_front["limits"][1])
+        # right_rear_angle = servo_pingpong(t + math.pi - math.pi/4, right_rear["limits"][0], right_rear["limits"][1])
+        # left_front["servo"].move(left_front_angle, 100, wait=True)
+        # left_rear["servo"].move(left_rear_angle, 100, wait=True)
+        # right_front["servo"].move(right_front_angle, 100, wait=True)
+        # right_rear["servo"].move(right_rear_angle, 100, wait=True)
+        # start_servos()
+        t += TIME_STEP
+        time.sleep(TIME_STEP)
+
+
+except KeyboardInterrupt:
+    print("Exiting...")
+finally:
+    for servo in servos.values():
+        servo["servo"].disable_torque()

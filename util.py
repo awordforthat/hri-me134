@@ -1,3 +1,6 @@
+max_step_num = 0
+
+
 def lerp(a, b, t):
     """Linearly interpolate between a and b by t."""
     return a + (b - a) * t
@@ -6,6 +9,7 @@ def lerp(a, b, t):
 def advance_keyframe_sequence(
     servos, keyframes=[], step_num=0, t=0, time_step=0.05, speed_factor=1
 ):
+    global max_step_num
 
     total_duration = sum(kf["max_duration"] for kf in keyframes) / 1000 * speed_factor
 
@@ -29,6 +33,8 @@ def advance_keyframe_sequence(
         # Fallback for floating point edge cases
         current_step_num = len(keyframes) - 1
         offset_t_in_current_step = keyframes[-1]["max_duration"] / 1000 * speed_factor
+
+    max_step_num = max(max_step_num, current_step_num)
 
     current_keyframe = keyframes[current_step_num]
     prior_keyframe = keyframes[current_step_num - 1] if current_step_num > 0 else None
@@ -55,6 +61,7 @@ def advance_keyframe_sequence(
             percent_through_current_step,
         )
 
+        print(interpolated_angle)
         servos[servo_name]["servo"].move(
             int(interpolated_angle), int(time_step * 1000), wait=True
         )

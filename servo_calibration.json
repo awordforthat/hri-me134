@@ -1,0 +1,32 @@
+{
+  "left_front": {
+    "home": 149.28,
+    "max": 203.76,
+    "min": 102.96
+  },
+  "left_hip": {
+    "home": 109.68,
+    "max": 155.76,
+    "min": 63.36
+  },
+  "left_rear": {
+    "home": 227.28,
+    "max": 236.64,
+    "min": 163.68
+  },
+  "right_front": {
+    "home": 145.44,
+    "max": 200.64,
+    "min": 87.36
+  },
+  "right_hip": {
+    "home": 188.16,
+    "max": 123.12,
+    "min": 222.0
+  },
+  "right_rear": {
+    "home": 73.68,
+    "max": 41.52,
+    "min": 162.24
+  }
+}

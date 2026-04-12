@@ -1,0 +1,82 @@
+{
+  "extend_right": {
+    "left_front": 145.68,
+    "left_hip": 83.28,
+    "left_rear": 192.72,
+    "right_front": 171.6,
+    "right_hip": 190.56,
+    "right_rear": 117.12
+  },
+  "home": {
+    "left_front": 156.48,
+    "left_hip": 89.52,
+    "left_rear": 177.36,
+    "right_front": 136.56,
+    "right_hip": 196.56,
+    "right_rear": 124.8
+  },
+  "midpoint": {
+    "left_front": 159.36,
+    "left_hip": 106.56,
+    "left_rear": 203.52,
+    "right_front": 151.44,
+    "right_hip": 189.84,
+    "right_rear": 102.24
+  },
+  "raise_right": {
+    "left_front": 161.28,
+    "left_hip": 96.48,
+    "left_rear": 183.12,
+    "right_front": 144.0,
+    "right_hip": 223.68,
+    "right_rear": 81.6
+  },
+  "shift_left": {
+    "left_front": 146.16,
+    "left_hip": 74.4,
+    "left_rear": 192.72,
+    "right_front": 151.2,
+    "right_hip": 195.36,
+    "right_rear": 82.32
+  },
+  "shift_right": {
+    "left_front": 145.2,
+    "left_hip": 117.84,
+    "left_rear": 220.56,
+    "right_front": 125.04,
+    "right_hip": 222.96,
+    "right_rear": 114.72
+  },
+  "stand": {
+    "left_front": 151.2,
+    "left_hip": 107.04,
+    "left_rear": 213.6,
+    "right_front": 143.76,
+    "right_hip": 190.32,
+    "right_rear": 96.72
+  },
+  "swing_left_start": {
+    "left_front": 144.72,
+    "left_hip": 109.2,
+    "left_rear": 205.92,
+    "right_front": 191.28,
+    "right_hip": 202.8,
+    "right_rear": 118.8
+  },
+  "tall": {
+    "left_front": 163.2,
+    "left_hip": 101.52,
+    "left_rear": 185.76,
+    "right_front": 143.28,
+    "right_hip": 184.8,
+    "right_rear": 123.84
+  },
+  "transfer_right": {
+    "left_front": 153.6,
+    "left_hip": 109.68,
+    "left_rear": 213.6,
+    "right_front": 192.96,
+    "right_hip": 202.08,
+    "right_rear": 147.36
+  }
+}

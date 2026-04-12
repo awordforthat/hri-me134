@@ -14,6 +14,7 @@ import select
 from util import advance_keyframe_sequence
 from walk import keyframes as walk_positions_left
 from walk import keyframes_right as walk_positions_right
+from five_bar_ik import make_left_leg_ik, make_right_leg_ik
 
 
 LX16A.initialize("/dev/ttyUSB0")
@@ -143,6 +144,7 @@ def home(ids=[1, 2, 3, 4, 5, 6], duration=500):
     for servo in servos.values():
         if servo["id"] in ids:
             target = calibration[SERVO_NAMES[servo["id"]]]["home"]
+            target = max(0, min(240, target))
             servo["servo"].move(target, duration, wait=True)
     start_servos(ids)
 
@@ -223,8 +225,24 @@ def check_temperature():
             raise Exception(f"Servo {servo['id']} is overheating")
 
 
-TIME_STEP = 0.005
-GAIT_SPEED = 6
+TIME_STEP = 0.02
+GAIT_SPEED = 4
+GAIT_PERIOD = 6.0 / GAIT_SPEED  # seconds per full cycle; 2s at speed=3
+
+# Shared nominal stance (x, z) in leg frame. Both legs target the same.
+LEFT_STANCE = (10.0, -75.0)
+RIGHT_STANCE = (-40.0, -75.0)  # right IK is miscalibrated; shift back to match left physically
+STRIDE = 25.0  # forward step length (peak-to-peak in x)
+FOOT_LIFT = 22.0
+HIP_LEAN = 18.0  # degrees
+HIP_LEAN_LEAD = math.pi / 4  # lean leads swing by this phase
+HIP_LEAN_BIAS = 6.0  # constant bias; +value shifts average posture left
+STANCE_X_OFFSET = 0.0  # backward pitch now baked into home pose
+STANCE_Z_OFFSET = 0.0
+
+left_ik = make_left_leg_ik()
+right_ik = make_right_leg_ik()
+
 t = 0
 walk_step_num = 0
 
@@ -257,13 +275,17 @@ def left_shuffle_backwards(duration):
 
 
 def right_shuffle_forwards(duration):
-    right_front["servo"].move(get_home(right_front) + 30, int(duration * 1000), wait=True)
+    right_front["servo"].move(
+        get_home(right_front) + 30, int(duration * 1000), wait=True
+    )
     right_rear["servo"].move(get_home(right_rear) + 30, int(duration * 1000), wait=True)
     start_servos()
 
 
 def right_shuffle_backwards(duration):
-    right_front["servo"].move(get_home(right_front) - 40, int(duration * 1000), wait=True)
+    right_front["servo"].move(
+        get_home(right_front) - 40, int(duration * 1000), wait=True
+    )
     right_rear["servo"].move(get_home(right_rear) - 45, int(duration * 1000), wait=True)
     start_servos()
 
@@ -280,8 +302,40 @@ def right_home(duration):
     start_servos()
 
 
-ARC_DURATION = 4.0  # seconds for a one-way sweep (min → max)
+ARC_DURATION = 0.8  # seconds for a one-way sweep (min → max)
 SWEEP_PERIOD = 2 * ARC_DURATION  # full min → max → min cycle
+
+
+def left_leg_sin(t):
+    """Drive the left leg with a single sinusoid.
+
+    Front follows sin(t) across its limits; rear is pi/4 behind.
+    """
+    front = servo_pingpong(t, *left_front["limits"])
+    rear = servo_pingpong(t - math.pi / 4, *left_rear["limits"])
+    return front, rear
+
+
+def right_leg_sin(t):
+    """Drive the right leg with a single sinusoid, pi (half cycle) behind the left."""
+    front = servo_pingpong(t - math.pi, *right_front["limits"])
+    rear = servo_pingpong(t - math.pi - math.pi / 4, *right_rear["limits"])
+    return front, rear
+
+
+HIP_AMPLITUDE = 20  # degrees the hip dips from home at leg midpoint
+LEFT_HIP_HOME = get_home(left_hip)
+RIGHT_HIP_HOME = get_home(right_hip)
+
+
+def left_hip_sin(t):
+    """One dip per leg cycle: minimum when left leg front passes midpoint going forward."""
+    return LEFT_HIP_HOME - (HIP_AMPLITUDE / 2) * (1 + math.cos(t))
+
+
+def right_hip_sin(t):
+    """One dip per leg cycle, pi offset from left hip so they alternate."""
+    return RIGHT_HIP_HOME - (HIP_AMPLITUDE / 2) * (1 + math.cos(t - math.pi))
 
 
 def sweep_phase_offset(servo, opposite_branch=False):
@@ -308,97 +362,93 @@ lr_offset = sweep_phase_offset(left_rear, opposite_branch=True)
 rf_offset = sweep_phase_offset(right_front)
 rr_offset = sweep_phase_offset(right_rear, opposite_branch=True)
 
+
+def foot_xz(phase, stance):
+    """Foot (x, z) for a given phase, using the leg's own nominal stance."""
+    x0, z0 = stance
+    # Stance (sin≤0): foot moves backward in leg frame → pushes body forward.
+    # Swing (sin>0): foot moves forward in leg frame → resets for next step.
+    x = x0 - (STRIDE / 2) * math.cos(phase)
+    lift = FOOT_LIFT * max(0.0, math.sin(phase))
+    return x, z0 + lift
+
+
+def gait_tick(t):
+    phase_l = (t / GAIT_PERIOD) * 2 * math.pi
+    phase_r = phase_l + math.pi
+
+    lx, lz = foot_xz(phase_l, LEFT_STANCE)
+    rx, rz = foot_xz(phase_r, RIGHT_STANCE)
+
+    left_sol = left_ik.solve(lx, lz)
+    right_sol = right_ik.solve(rx, rz)
+    if left_sol is None or right_sol is None:
+        print(f"unreachable: L=({lx:.1f},{lz:.1f}) R=({rx:.1f},{rz:.1f})")
+        return
+
+    # solve() returns (A_cmd, B_cmd) = (rear, front)
+    l_rear_cmd, l_front_cmd = left_sol
+    r_rear_cmd, r_front_cmd = right_sol
+
+    # Lean toward stance leg: sin(phase_l)>0 means left swing → weight right → hips shift right (minus)
+    # +lean = subtracted from hips = shift right; subtract bias to bias left
+    lean = HIP_LEAN * math.sin(phase_l - HIP_LEAN_LEAD) - HIP_LEAN_BIAS
+    l_hip_cmd = LEFT_HIP_HOME - lean
+    r_hip_cmd = RIGHT_HIP_HOME - lean
+
+    dur_ms = int(TIME_STEP * 1000 * 3)  # servo move duration longer than tick
+    def c(v):
+        return int(max(0, min(240, v)))
+    left_rear["servo"].move(c(l_rear_cmd), dur_ms, wait=True)
+    left_front["servo"].move(c(l_front_cmd), dur_ms, wait=True)
+    right_rear["servo"].move(c(r_rear_cmd), dur_ms, wait=True)
+    right_front["servo"].move(c(r_front_cmd), dur_ms, wait=True)
+    left_hip["servo"].move(c(l_hip_cmd), dur_ms, wait=True)
+    right_hip["servo"].move(c(r_hip_cmd), dur_ms, wait=True)
+    start_servos()
+
+
+def print_home_foot_positions():
+    cal = load_calibration()
+    l_rear = cal[SERVO_NAMES[left_rear["id"]]]["home"]
+    l_front = cal[SERVO_NAMES[left_front["id"]]]["home"]
+    r_rear = cal[SERVO_NAMES[right_rear["id"]]]["home"]
+    r_front = cal[SERVO_NAMES[right_front["id"]]]["home"]
+    # solve() returns (A=rear, B=front); forward_foot expects (left_cmd, right_cmd) = (A, B)
+    left_foot = left_ik.forward_foot(l_rear, l_front)
+    right_foot = right_ik.forward_foot(r_rear, r_front)
+    print(f"home pose → left foot: {left_foot}")
+    print(f"home pose → right foot: {right_foot}")
+    return left_foot, right_foot
+
+
 try:
     print("moving to home position")
     home(duration=1500)
     time.sleep(2)
+    print_home_foot_positions()
+    print(f"gait stance (fixed) — left: {LEFT_STANCE}, right: {RIGHT_STANCE}")
 
-    print("sweeping front/rear servos between min and max")
-    t = 0
+    print("easing into gait start pose")
+    # Ease to each leg's pure nominal stance (no stride, no lift) so belly stays level.
+    lx, lz = LEFT_STANCE
+    rx, rz = RIGHT_STANCE
+    l_sol = left_ik.solve(lx, lz)
+    r_sol = right_ik.solve(rx, rz)
+    if l_sol and r_sol:
+        ease_ms = 2000
+        clamp_cmd = lambda v: int(max(0, min(240, v)))
+        left_rear["servo"].move(clamp_cmd(l_sol[0]), ease_ms, wait=True)
+        left_front["servo"].move(clamp_cmd(l_sol[1]), ease_ms, wait=True)
+        right_rear["servo"].move(clamp_cmd(r_sol[0]), ease_ms, wait=True)
+        right_front["servo"].move(clamp_cmd(r_sol[1]), ease_ms, wait=True)
+        start_servos()
+        time.sleep(ease_ms / 1000 + 0.5)
+
+    print("running five-bar IK gait (stationary stepping)")
     while True:
-        phase = 2 * math.pi * t / SWEEP_PERIOD
-
-        lf = servo_pingpong(phase + lf_offset, *left_front["limits"])
-        lr = servo_pingpong(phase + lr_offset, *left_rear["limits"])
-        rf = servo_pingpong(phase + rf_offset, *right_front["limits"])
-        rr = servo_pingpong(phase + rr_offset, *right_rear["limits"])
-
-        left_front["servo"].move(lf, int(TIME_STEP * 1000), wait=False)
-        left_rear["servo"].move(lr, int(TIME_STEP * 1000), wait=False)
-        right_front["servo"].move(rf, int(TIME_STEP * 1000), wait=False)
-        right_rear["servo"].move(rr, int(TIME_STEP * 1000), wait=False)
-
-        # while True:
-
-        #     check_temperature()
-
-        #     if consume_print_request():
-        #         print_servo_positions()
-
-        #     left_front_min = 50
-        #     left_front_max = 120
-        #     left_rear_min = 120
-        #     left_rear_max = 210
-
-        #     right_front_min = 133
-        #     right_front_max = 174
-        #     right_rear_min = 25
-        #     right_rear_max = 105
-
-        #     left_hip_min = 190
-        #     left_hip_max = 210
-        #     right_hip_min = 75
-        #     right_hip_max = 100
-
-        #     left_front_angle = servo_pingpong(t, left_front_min, left_front_max)
-        #     left_rear_angle = servo_pingpong(t - math.pi / 4, left_rear_min, left_rear_max)
-        #     left_hip_angle = servo_pingpong(t + math.pi / 2, left_hip_min, left_hip_max)
-        #     right_front_angle = servo_pingpong(t, right_front_min, right_front_max)
-        #     right_rear_angle = servo_pingpong(
-        #         t - math.pi / 4, right_rear_min, right_rear_max
-        #     )
-        #     right_hip_angle = servo_pingpong(t + math.pi / 2, right_hip_min, right_hip_max)
-
-        #     left_front["servo"].move(left_front_angle, int(TIME_STEP * 1000), wait=True)
-        #     left_rear["servo"].move(left_rear_angle, int(TIME_STEP * 1000), wait=True)
-        #     left_hip["servo"].move(left_hip_angle, int(TIME_STEP * 1000), wait=True)
-        #     right_front["servo"].move(right_front_angle, int(TIME_STEP * 1000), wait=True)
-        #     right_rear["servo"].move(right_rear_angle, int(TIME_STEP * 1000), wait=True)
-        #     right_hip["servo"].move(right_hip_angle, int(TIME_STEP * 1000), wait=True)
-        #     start_servos()
-
-        #     t += TIME_STEP * GAIT_SPEED
-        #     time.sleep(TIME_STEP)
-
-        # while True:
-        #     shift_right(0.75)
-        #     right_home(0.5)
-        #     time.sleep(0.75)
-        #     left_shuffle_backwards(0.1)
-        #     time.sleep(0.1)
-        #     shift_left(0.75)
-        #     left_home(0.5)
-        #     time.sleep(0.75)
-        #     right_shuffle_backwards(0.1)
-        #     time.sleep(0.1)
-
-        # complete, walk_step_num = advance_keyframe_sequence(
-        #     {
-        #         "left_front": left_front,
-        #         "left_rear": left_rear,
-        #         "left_hip": left_hip,
-        #         "right_front": right_front,
-        #         "right_rear": right_rear,
-        #         "right_hip": right_hip,
-        #     },
-        #     walk_positions_left,
-        #     walk_step_num,
-        #     t,
-        #     time_step=TIME_STEP,
-        #     speed_factor=1,
-        # )
+        gait_tick(t)
         t += TIME_STEP
-
         time.sleep(TIME_STEP)
 
 

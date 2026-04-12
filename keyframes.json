@@ -1,0 +1,86 @@
+[
+  {
+    "servo_angles": {
+      "left_front": 129.12,
+      "left_rear": 166.08,
+      "left_hip": 103.2,
+      "right_front": 148.08,
+      "right_rear": 78.48,
+      "right_hip": 220.56
+    },
+    "max_duration": 500,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 153.6,
+      "left_rear": 217.44,
+      "left_hip": 102.24,
+      "right_front": 165.12,
+      "right_rear": 90.24,
+      "right_hip": 211.2
+    },
+    "max_duration": 200,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 153.84,
+      "left_rear": 229.44,
+      "left_hip": 108.0,
+      "right_front": 154.32,
+      "right_rear": 108.48,
+      "right_hip": 208.32
+    },
+    "max_duration": 500,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 153.6,
+      "left_rear": 229.92,
+      "left_hip": 97.92,
+      "right_front": 134.16,
+      "right_rear": 82.56,
+      "right_hip": 208.08
+    },
+    "max_duration": 500,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 174.24,
+      "left_rear": 230.16,
+      "left_hip": 84.72,
+      "right_front": 127.92,
+      "right_rear": 124.56,
+      "right_hip": 217.2
+    },
+    "max_duration": 200,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 133.68,
+      "left_rear": 216.0,
+      "left_hip": 96.24,
+      "right_front": 122.88,
+      "right_rear": 54.48,
+      "right_hip": 191.76
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 141.36,
+      "left_rear": 223.68,
+      "left_hip": 96.0,
+      "right_front": 138.24,
+      "right_rear": 67.44,
+      "right_hip": 192.72
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  }
+]

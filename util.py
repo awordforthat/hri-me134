@@ -7,7 +7,13 @@ def lerp(a, b, t):
 
 
 def advance_keyframe_sequence(
-    servos, keyframes=[], step_num=0, t=0, time_step=0.05, speed_factor=1
+    servos,
+    keyframes=[],
+    step_num=0,
+    t=0,
+    time_step=0.05,
+    speed_factor=1,
+    prior_pose=None,
 ):
     global max_step_num
 
@@ -52,6 +58,8 @@ def advance_keyframe_sequence(
     for servo_name, target_angle in current_keyframe["servo_angles"].items():
         if prior_keyframe and servo_name in prior_keyframe["servo_angles"]:
             starting_angle = prior_keyframe["servo_angles"][servo_name]
+        elif prior_pose and servo_name in prior_pose:
+            starting_angle = prior_pose[servo_name]
         else:
             starting_angle = servos[servo_name]["servo"].get_physical_angle()
 

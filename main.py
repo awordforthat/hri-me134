@@ -1,19 +1,8 @@
-from math import sin, cos
 from pylx16a.lx16a import *
 import json
 import math
 import time
 
-import threading
-import sys
-import termios
-import tty
-import time
-import select
-
-from util import advance_keyframe_sequence
-from walk import keyframes as walk_positions_left
-from walk import keyframes_right as walk_positions_right
 from five_bar_ik import make_left_leg_ik, make_right_leg_ik
 
 
@@ -32,13 +21,6 @@ SERVO_CONFIG = {
     },
 }
 
-# left_hip:  200.88
-# right_hip:  89.28
-# left_front:  78.96
-# right_front:  149.76
-# left_rear:  150.0
-# right_rear:  80.4
-SERVO_TEMPERATURE_LIMIT = 45  # degrees Celsius
 CALIBRATION_FILE = "servo_calibration.json"
 
 # id -> "<side>_<part>" (e.g. 5 -> "left_front") for calibration-file lookups
@@ -73,62 +55,6 @@ right_rear = servos[2]
 right_hip = servos[1]
 
 
-def move_solo(servo_num):
-    for servo in servos.values():
-        if servo["id"] != servo_num:
-            servo["servo"].disable_torque()
-
-
-def disable_torque(servo_ids=[1, 2, 3, 4, 5, 6]):
-    for servo in servos.values():
-        if servo["id"] in servo_ids:
-            servo["servo"].disable_torque()
-
-
-def clamp(x: float, lo: float = -1.0, hi: float = 1.0) -> float:
-    return max(lo, min(hi, x))
-
-
-def servo_sin_cos(t):
-    """
-    Returns (front_angle, rear_angle)
-
-    front  = follows sin(t)
-    rear   = follows cos(t)
-
-    Output angles are always between 0° and 240°.
-    """
-
-    mid = 120  # midpoint of 0–240
-    amp = 120  # amplitude
-
-    front = mid + amp * math.sin(t)
-    rear = mid + amp * math.cos(t)
-
-    # clamp to ensure limits
-    front = max(0, min(240, front))
-    rear = max(0, min(240, rear))
-
-    return front, rear
-
-
-def servo_pingpong(t, x, y):
-    """
-    Returns an angle that oscillates sinusoidally between x and y.
-
-    t : time (radians)
-    x : minimum angle
-    y : maximum angle
-    """
-
-    mid = (x + y) / 2
-    amp = (y - x) / 2
-
-    angle = mid + amp * math.sin(t)
-
-    return angle
-
-
 def load_calibration():
     with open(CALIBRATION_FILE) as f:
         return json.load(f)
@@ -155,212 +81,28 @@ def start_servos(ids=[1, 2, 3, 4, 5, 6]):
             servo["servo"].move_start()
 
 
-print_positions_requested = False
-print_request_lock = threading.Lock()
-
-
-def print_servo_positions():
-    right_hip_pos = right_hip["servo"].get_physical_angle()
-    left_hip_pos = left_hip["servo"].get_physical_angle()
-    right_front_pos = right_front["servo"].get_physical_angle()
-    left_front_pos = left_front["servo"].get_physical_angle()
-    right_rear_pos = right_rear["servo"].get_physical_angle()
-    left_rear_pos = left_rear["servo"].get_physical_angle()
-    print("left_hip: ", left_hip_pos)
-    print("right_hip: ", right_hip_pos)
-    print("left_front: ", left_front_pos)
-    print("right_front: ", right_front_pos)
-    print("left_rear: ", left_rear_pos)
-    print("right_rear: ", right_rear_pos)
-
-    print()
-
-
-def request_print_servo_positions():
-    global print_positions_requested
-    with print_request_lock:
-        print_positions_requested = True
-
-
-def consume_print_request():
-    global print_positions_requested
-    with print_request_lock:
-        was_requested = print_positions_requested
-        print_positions_requested = False
-    return was_requested
-
-
-def on_space():
-    request_print_servo_positions()
-
-
-def goto_position(servo, target_angle, duration):
-    servo["servo"].move(target_angle, int(duration * 1000), wait=True)
-    start_servos()
-
-
-def key_listener():
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-
-    try:
-        tty.setcbreak(fd)
-        while True:
-            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
-                ch = sys.stdin.read(1)
-                if ch == " ":
-                    on_space()
-            time.sleep(0.01)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-
-threading.Thread(target=key_listener, daemon=True).start()
-
-
-def check_temperature():
-    for servo in servos.values():
-        temp = servo["servo"].get_temp()
-        if temp > SERVO_TEMPERATURE_LIMIT:
-            raise Exception(f"Servo {servo['id']} is overheating")
-
-
 TIME_STEP = 0.02
 GAIT_SPEED = 4
 GAIT_PERIOD = 6.0 / GAIT_SPEED  # seconds per full cycle; 2s at speed=3
 
 # Shared nominal stance (x, z) in leg frame. Both legs target the same.
-LEFT_STANCE = (10.0, -75.0)
-RIGHT_STANCE = (-40.0, -75.0)  # right IK is miscalibrated; shift back to match left physically
-STRIDE = 25.0  # forward step length (peak-to-peak in x)
-FOOT_LIFT = 22.0
-HIP_LEAN = 18.0  # degrees
+LEFT_STANCE = (8.0, -115.0)
+RIGHT_STANCE = (8.0, -115.0)
+STRIDE = 0.0  # forward step length (peak-to-peak in x)
+FOOT_LIFT = 40.0
+HIP_LEAN = 10  # degrees
 HIP_LEAN_LEAD = math.pi / 4  # lean leads swing by this phase
-HIP_LEAN_BIAS = 6.0  # constant bias; +value shifts average posture left
-STANCE_X_OFFSET = 0.0  # backward pitch now baked into home pose
-STANCE_Z_OFFSET = 0.0
+HIP_NARROW = (
+    10.0  # degrees each hip is biased inward from home; flip sign if stance widens
+)
 
 left_ik = make_left_leg_ik()
 right_ik = make_right_leg_ik()
 
-t = 0
-walk_step_num = 0
-
-max_left_front = left_front["servo"].get_physical_angle()
-max_left_rear = left_rear["servo"].get_physical_angle()
-
-
-def shift_right(duration):
-    left_hip["servo"].move(get_home(left_hip) - 25, int(duration * 1000), wait=True)
-    right_hip["servo"].move(get_home(right_hip) - 25, int(duration * 1000), wait=True)
-    start_servos()
-
-
-def shift_left(duration):
-    left_hip["servo"].move(get_home(left_hip) + 25, int(duration * 1000), wait=True)
-    right_hip["servo"].move(get_home(right_hip) + 25, int(duration * 1000), wait=True)
-    start_servos()
-
-
-def left_shuffle_forwards(duration):
-    left_front["servo"].move(get_home(left_front) - 30, int(duration * 1000), wait=True)
-    left_rear["servo"].move(get_home(left_rear) - 30, int(duration * 1000), wait=True)
-    start_servos()
-
-
-def left_shuffle_backwards(duration):
-    left_front["servo"].move(get_home(left_front) + 40, int(duration * 1000), wait=True)
-    left_rear["servo"].move(get_home(left_rear) + 45, int(duration * 1000), wait=True)
-    start_servos()
-
-
-def right_shuffle_forwards(duration):
-    right_front["servo"].move(
-        get_home(right_front) + 30, int(duration * 1000), wait=True
-    )
-    right_rear["servo"].move(get_home(right_rear) + 30, int(duration * 1000), wait=True)
-    start_servos()
-
-
-def right_shuffle_backwards(duration):
-    right_front["servo"].move(
-        get_home(right_front) - 40, int(duration * 1000), wait=True
-    )
-    right_rear["servo"].move(get_home(right_rear) - 45, int(duration * 1000), wait=True)
-    start_servos()
-
-
-def left_home(duration):
-    left_front["servo"].move(get_home(left_front), int(duration * 1000), wait=True)
-    left_rear["servo"].move(get_home(left_rear), int(duration * 1000), wait=True)
-    start_servos()
-
-
-def right_home(duration):
-    right_front["servo"].move(get_home(right_front), int(duration * 1000), wait=True)
-    right_rear["servo"].move(get_home(right_rear), int(duration * 1000), wait=True)
-    start_servos()
-
-
-ARC_DURATION = 0.8  # seconds for a one-way sweep (min → max)
-SWEEP_PERIOD = 2 * ARC_DURATION  # full min → max → min cycle
-
-
-def left_leg_sin(t):
-    """Drive the left leg with a single sinusoid.
-
-    Front follows sin(t) across its limits; rear is pi/4 behind.
-    """
-    front = servo_pingpong(t, *left_front["limits"])
-    rear = servo_pingpong(t - math.pi / 4, *left_rear["limits"])
-    return front, rear
-
-
-def right_leg_sin(t):
-    """Drive the right leg with a single sinusoid, pi (half cycle) behind the left."""
-    front = servo_pingpong(t - math.pi, *right_front["limits"])
-    rear = servo_pingpong(t - math.pi - math.pi / 4, *right_rear["limits"])
-    return front, rear
-
-
-HIP_AMPLITUDE = 20  # degrees the hip dips from home at leg midpoint
 LEFT_HIP_HOME = get_home(left_hip)
 RIGHT_HIP_HOME = get_home(right_hip)
 
-
-def left_hip_sin(t):
-    """One dip per leg cycle: minimum when left leg front passes midpoint going forward."""
-    return LEFT_HIP_HOME - (HIP_AMPLITUDE / 2) * (1 + math.cos(t))
-
-
-def right_hip_sin(t):
-    """One dip per leg cycle, pi offset from left hip so they alternate."""
-    return RIGHT_HIP_HOME - (HIP_AMPLITUDE / 2) * (1 + math.cos(t - math.pi))
-
-
-def sweep_phase_offset(servo, opposite_branch=False):
-    """Phase offset so that the servo starts exactly at its calibrated home.
-
-    Using the principal asin branch gives cos(offset) >= 0 (one velocity sign);
-    the (pi - asin) branch gives cos(offset) <= 0 (opposite sign). Passing
-    opposite_branch=True picks the second branch so rear servos can still move
-    against the front servos at t=0 while also starting at home.
-    """
-    home_val = get_home(servo)
-    x, y = servo["limits"]
-    mid = (x + y) / 2
-    amp = (y - x) / 2
-    ratio = max(-1.0, min(1.0, (home_val - mid) / amp))
-    base = math.asin(ratio)
-    if opposite_branch:
-        base = math.pi - base
-    return base
-
-
-lf_offset = sweep_phase_offset(left_front)
-lr_offset = sweep_phase_offset(left_rear, opposite_branch=True)
-rf_offset = sweep_phase_offset(right_front)
-rr_offset = sweep_phase_offset(right_rear, opposite_branch=True)
+t = 0
 
 
 def foot_xz(phase, stance):
@@ -390,15 +132,19 @@ def gait_tick(t):
     l_rear_cmd, l_front_cmd = left_sol
     r_rear_cmd, r_front_cmd = right_sol
 
-    # Lean toward stance leg: sin(phase_l)>0 means left swing → weight right → hips shift right (minus)
-    # +lean = subtracted from hips = shift right; subtract bias to bias left
-    lean = HIP_LEAN * math.sin(phase_l - HIP_LEAN_LEAD) - HIP_LEAN_BIAS
-    l_hip_cmd = LEFT_HIP_HOME - lean
-    r_hip_cmd = RIGHT_HIP_HOME - lean
+    if int(t / TIME_STEP) % 10 == 0:
+        print(f"t={t:5.2f}  L=({lx:+5.1f},{lz:+6.1f})  R=({rx:+5.1f},{rz:+6.1f})")
 
-    dur_ms = int(TIME_STEP * 1000 * 3)  # servo move duration longer than tick
+    # Lean toward stance leg: sin(phase_l)>0 means left swing → weight right → hips shift right (minus)
+    lean = HIP_LEAN * math.sin(phase_l - HIP_LEAN_LEAD)
+    l_hip_cmd = LEFT_HIP_HOME - lean - HIP_NARROW
+    r_hip_cmd = RIGHT_HIP_HOME - lean + HIP_NARROW
+
+    dur_ms = int(TIME_STEP * 1000)  # servo move duration = tick period
+
     def c(v):
         return int(max(0, min(240, v)))
+
     left_rear["servo"].move(c(l_rear_cmd), dur_ms, wait=True)
     left_front["servo"].move(c(l_front_cmd), dur_ms, wait=True)
     right_rear["servo"].move(c(r_rear_cmd), dur_ms, wait=True)
@@ -442,6 +188,12 @@ try:
         left_front["servo"].move(clamp_cmd(l_sol[1]), ease_ms, wait=True)
         right_rear["servo"].move(clamp_cmd(r_sol[0]), ease_ms, wait=True)
         right_front["servo"].move(clamp_cmd(r_sol[1]), ease_ms, wait=True)
+        left_hip["servo"].move(
+            clamp_cmd(LEFT_HIP_HOME - HIP_NARROW), ease_ms, wait=True
+        )
+        right_hip["servo"].move(
+            clamp_cmd(RIGHT_HIP_HOME + HIP_NARROW), ease_ms, wait=True
+        )
         start_servos()
         time.sleep(ease_ms / 1000 + 0.5)
 

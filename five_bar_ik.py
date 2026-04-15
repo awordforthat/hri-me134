@@ -28,11 +28,11 @@ import numpy as np
 # ─────────────────────────────────────────────
 
 # Geometry (measure from CAD, in mm)
-SERVO_SEPARATION = 26.5  # horizontal distance between the two servo axles
-L1_LEFT = 70.4  # proximal link: left servo axle → left elbow joint
-L2_RIGHT = 70.4  # proximal link: right servo axle → right elbow joint
-L3_LEFT = 77.6  # distal link:   left elbow joint → foot coupler
-L4_RIGHT = 75.0  # distal link:   right elbow joint → foot coupler
+SERVO_SEPARATION = 27.25  # horizontal distance between the two servo axles
+L1_LEFT = 70.0  # proximal link: left servo axle → left elbow joint
+L2_RIGHT = 70.0  # proximal link: right servo axle → right elbow joint
+L3_LEFT = 76.963  # distal link:   left elbow joint → foot coupler
+L4_RIGHT = 86.8  # distal link:   right elbow joint → foot coupler
 
 # Servo zero-point offsets (degrees)
 # cmd = mechanical_angle + offset
@@ -40,12 +40,19 @@ L4_RIGHT = 75.0  # distal link:   right elbow joint → foot coupler
 # Calibrated from: foot at (-25, -76) mm with leg straight down
 
 # Left leg
-LEFT_LEG_REAR_OFFSET = 273.76  # A servo (rear)
-LEFT_LEG_FRONT_OFFSET = 220.29  # B servo (front)
+LEFT_LEG_REAR_OFFSET = 302.93
+LEFT_LEG_FRONT_OFFSET = 178.41
 
-# Right leg
-RIGHT_LEG_REAR_OFFSET = 120.16  # A servo (rear)
-RIGHT_LEG_FRONT_OFFSET = 216.45  # B servo (front)
+RIGHT_LEG_REAR_OFFSET = 259.01
+RIGHT_LEG_FRONT_OFFSET = 172.89
+
+# Per-servo rotation direction: +1 if increasing cmd rotates link CCW in leg
+# frame, -1 if mounted reversed. Calibration locks the home point regardless,
+# but if the sign is wrong the servos drive the wrong way on any foot motion.
+LEFT_LEG_REAR_DIR = 1
+LEFT_LEG_FRONT_DIR = 1
+RIGHT_LEG_REAR_DIR = 1
+RIGHT_LEG_FRONT_DIR = 1
 
 # Default (left leg) — swap to right leg offsets when instantiating for right leg
 LEFT_SERVO_OFFSET = LEFT_LEG_REAR_OFFSET
@@ -54,7 +61,7 @@ RIGHT_SERVO_OFFSET = LEFT_LEG_FRONT_OFFSET
 # Elbow configuration — which of the two IK solutions matches your physical build.
 # "True" means the elbow joint swings outward/upward; "False" means inward/downward.
 # Look at the CAD: if the left elbow is to the left of the proximal link → True, etc.
-LEFT_ELBOW_UP = True
+LEFT_ELBOW_UP = False
 RIGHT_ELBOW_UP = True
 
 # ─────────────────────────────────────────────
@@ -78,6 +85,8 @@ class FiveBarIK:
         right_offset=RIGHT_SERVO_OFFSET,
         left_elbow_up=LEFT_ELBOW_UP,
         right_elbow_up=RIGHT_ELBOW_UP,
+        left_dir=1,
+        right_dir=1,
     ):
 
         self.d = servo_sep
@@ -87,6 +96,8 @@ class FiveBarIK:
         self.right_offset = right_offset
         self.left_elbow_up = left_elbow_up
         self.right_elbow_up = right_elbow_up
+        self.left_dir = left_dir
+        self.right_dir = right_dir
 
         # Fixed servo axle positions in leg frame
         self.A = np.array([0.0, 0.0])  # left servo
@@ -144,12 +155,18 @@ class FiveBarIK:
         if theta_L is None or theta_R is None:
             return None
 
-        left_cmd = np.degrees(theta_L) + self.left_offset
-        right_cmd = np.degrees(theta_R) + self.right_offset
+        left_cmd_raw = self.left_dir * np.degrees(theta_L) + self.left_offset
+        right_cmd_raw = self.right_dir * np.degrees(theta_R) + self.right_offset
 
-        # Clamp to servo range
-        left_cmd = float(np.clip(left_cmd, 0, 240))
-        right_cmd = float(np.clip(right_cmd, 0, 240))
+        left_cmd = float(np.clip(left_cmd_raw, 0, 240))
+        right_cmd = float(np.clip(right_cmd_raw, 0, 240))
+
+        if left_cmd != left_cmd_raw or right_cmd != right_cmd_raw:
+            print(
+                f"IK CLAMP at ({x:.1f},{z:.1f}): "
+                f"L {left_cmd_raw:.1f}->{left_cmd:.1f}  "
+                f"R {right_cmd_raw:.1f}->{right_cmd:.1f}"
+            )
 
         return left_cmd, right_cmd
 
@@ -163,8 +180,8 @@ class FiveBarIK:
         foot is the midpoint of the two distal-link endpoints — for a well-calibrated
         mechanism these should coincide. Any gap indicates calibration error.
         """
-        theta_L = np.radians(left_cmd - self.left_offset)
-        theta_R = np.radians(right_cmd - self.right_offset)
+        theta_L = np.radians((left_cmd - self.left_offset) / self.left_dir)
+        theta_R = np.radians((right_cmd - self.right_offset) / self.right_dir)
 
         elbow_L = self.A + self.l1 * np.array([np.cos(theta_L), np.sin(theta_L)])
         elbow_R = self.B + self.l2 * np.array([np.cos(theta_R), np.sin(theta_R)])
@@ -179,8 +196,8 @@ class FiveBarIK:
         """Given servo commands, return the foot (x, z) position, or None.
         Intersects the two distal-link circles around the elbows and picks the
         solution matching the configured elbow_up flags."""
-        theta_L = np.radians(left_cmd - self.left_offset)
-        theta_R = np.radians(right_cmd - self.right_offset)
+        theta_L = np.radians((left_cmd - self.left_offset) / self.left_dir)
+        theta_R = np.radians((right_cmd - self.right_offset) / self.right_dir)
 
         eL = self.A + self.l1 * np.array([np.cos(theta_L), np.sin(theta_L)])
         eR = self.B + self.l2 * np.array([np.cos(theta_R), np.sin(theta_R)])
@@ -198,16 +215,23 @@ class FiveBarIK:
         perp = np.array([-v[1], v[0]]) / d
         p1 = mid + h * perp
         p2 = mid - h * perp
-        # Pick the candidate that, round-tripped through solve(), reproduces the input cmds.
-        best, best_err = None, float("inf")
-        for p in (p1, p2):
-            sol = self.solve(float(p[0]), float(p[1]))
-            if sol is None:
-                continue
-            err = abs(sol[0] - left_cmd) + abs(sol[1] - right_cmd)
-            if err < best_err:
-                best_err, best = err, p
-        return tuple(best) if best is not None else None
+
+        # Pick the candidate matching the configured elbow_up flags (without
+        # routing through clamped solve(), which can pick the wrong branch
+        # when cmds saturate).
+        def matches(p):
+            theta_L_check = self._two_link_ik(
+                self.A, self.l1, self.l3, p, self.left_elbow_up
+            )
+            theta_R_check = self._two_link_ik(
+                self.B, self.l2, self.l4, p, self.right_elbow_up
+            )
+            if theta_L_check is None or theta_R_check is None:
+                return float("inf")
+            return abs(theta_L_check - theta_L) + abs(theta_R_check - theta_R)
+
+        best = min((p1, p2), key=matches)
+        return tuple(best)
 
     def verify_closure(self, x, z, left_cmd, right_cmd, tol_mm=0.5):
         """
@@ -216,8 +240,8 @@ class FiveBarIK:
         Returns (left_error_mm, right_error_mm, ok).
         """
         target = np.array([x, z])
-        theta_L = np.radians(left_cmd - self.left_offset)
-        theta_R = np.radians(right_cmd - self.right_offset)
+        theta_L = np.radians((left_cmd - self.left_offset) / self.left_dir)
+        theta_R = np.radians((right_cmd - self.right_offset) / self.right_dir)
 
         elbow_L = self.A + self.l1 * np.array([np.cos(theta_L), np.sin(theta_L)])
         elbow_R = self.B + self.l2 * np.array([np.cos(theta_R), np.sin(theta_R)])
@@ -296,28 +320,21 @@ class ServoCalibrator:
         """
         target = np.array([x, z])
 
-        # Solve with zero offsets to get theoretical mechanical angles
-        ik_zero = FiveBarIK(
-            self.ik.d,
-            self.ik.l1,
-            self.ik.l2,
-            self.ik.l3,
-            self.ik.l4,
-            left_offset=0.0,
-            right_offset=0.0,
-            left_elbow_up=self.ik.left_elbow_up,
-            right_elbow_up=self.ik.right_elbow_up,
+        # Compute theoretical link angles directly (bypass solve() which clips to [0,240]).
+        theta_L = self.ik._two_link_ik(
+            self.ik.A, self.ik.l1, self.ik.l3, target, self.ik.left_elbow_up
         )
-        result = ik_zero.solve(x, z)
-        if result is None:
+        theta_R = self.ik._two_link_ik(
+            self.ik.B, self.ik.l2, self.ik.l4, target, self.ik.right_elbow_up
+        )
+        if theta_L is None or theta_R is None:
             print(
                 f"ERROR: ({x}, {z}) is outside the workspace. Try a different calibration pose."
             )
             return
 
-        left_theoretical, right_theoretical = (
-            result  # these are in degrees from +X axis
-        )
+        left_theoretical = self.ik.left_dir * np.degrees(theta_L)
+        right_theoretical = self.ik.right_dir * np.degrees(theta_R)
 
         left_offset = left_cmd_actual - left_theoretical
         right_offset = right_cmd_actual - right_theoretical
@@ -339,13 +356,19 @@ class ServoCalibrator:
 
 def make_left_leg_ik():
     return FiveBarIK(
-        left_offset=LEFT_LEG_REAR_OFFSET, right_offset=LEFT_LEG_FRONT_OFFSET
+        left_offset=LEFT_LEG_REAR_OFFSET,
+        right_offset=LEFT_LEG_FRONT_OFFSET,
+        left_dir=LEFT_LEG_REAR_DIR,
+        right_dir=LEFT_LEG_FRONT_DIR,
     )
 
 
 def make_right_leg_ik():
     return FiveBarIK(
-        left_offset=RIGHT_LEG_REAR_OFFSET, right_offset=RIGHT_LEG_FRONT_OFFSET
+        left_offset=RIGHT_LEG_REAR_OFFSET,
+        right_offset=RIGHT_LEG_FRONT_OFFSET,
+        left_dir=RIGHT_LEG_REAR_DIR,
+        right_dir=RIGHT_LEG_FRONT_DIR,
     )
 
 

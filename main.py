@@ -86,14 +86,14 @@ GAIT_SPEED = 4
 GAIT_PERIOD = 6.0 / GAIT_SPEED  # seconds per full cycle; 2s at speed=3
 
 # Shared nominal stance (x, z) in leg frame. Both legs target the same.
-LEFT_STANCE = (8.0, -115.0)
-RIGHT_STANCE = (8.0, -115.0)
-STRIDE = 0.0  # forward step length (peak-to-peak in x)
+LEFT_STANCE = (0, -110.0)
+RIGHT_STANCE = (0, -115.0)
+STRIDE = 20.0  # forward step length (peak-to-peak in x)
 FOOT_LIFT = 40.0
-HIP_LEAN = 10  # degrees
+HIP_LEAN = 5  # degrees
 HIP_LEAN_LEAD = math.pi / 4  # lean leads swing by this phase
 HIP_NARROW = (
-    10.0  # degrees each hip is biased inward from home; flip sign if stance widens
+    0.0  # degrees each hip is biased inward from home; flip sign if stance widens
 )
 
 left_ik = make_left_leg_ik()

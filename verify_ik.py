@@ -10,10 +10,15 @@ import json
 
 from five_bar_ik import make_left_leg_ik, make_right_leg_ik
 
-# Update these to match the (x, z) you measured during recalibrate_ik.py.
-EXPECTED_FOOT_LEFT = (8.0, -108.0)
-EXPECTED_FOOT_RIGHT = (12.0, -108.0)
 CAL_FILE = "servo_calibration.json"
+IK_CAL_FILE = "ik_calibration.json"
+
+with open(IK_CAL_FILE) as _f:
+    _ik_cal = json.load(_f)
+
+# Foot (x, z) measured during the most recent recalibrate_ik.py run.
+EXPECTED_FOOT_LEFT = tuple(_ik_cal["left"]["home_foot"])
+EXPECTED_FOOT_RIGHT = tuple(_ik_cal["right"]["home_foot"])
 
 
 def fk_check(name, ik, rear_cmd, front_cmd, expected):

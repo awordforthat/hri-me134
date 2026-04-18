@@ -18,8 +18,8 @@ right_front = LX16A(3)
 right_hip = LX16A(1)
 
 LEAN_DEG = 20.0
-HIP_NARROW = 10.0
-LEFT_FOOT_LIFTED = (8.0, -80.0)
+HIP_NARROW = 0.0
+LEFT_FOOT_LIFTED = (-20.0, -70.0)
 RIGHT_FOOT_PLANTED = (8.0, -115.0)
 
 left_ik = make_left_leg_ik()

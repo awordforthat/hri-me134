@@ -82,18 +82,18 @@ def start_servos(ids=[1, 2, 3, 4, 5, 6]):
 
 
 TIME_STEP = 0.02
-GAIT_SPEED = 4
+GAIT_SPEED = 3
 GAIT_PERIOD = 6.0 / GAIT_SPEED  # seconds per full cycle; 2s at speed=3
 
 # Shared nominal stance (x, z) in leg frame. Both legs target the same.
-LEFT_STANCE = (0, -110.0)
-RIGHT_STANCE = (0, -115.0)
-STRIDE = 20.0  # forward step length (peak-to-peak in x)
-FOOT_LIFT = 40.0
-HIP_LEAN = 5  # degrees
-HIP_LEAN_LEAD = math.pi / 4  # lean leads swing by this phase
+LEFT_STANCE = (15, -105)
+RIGHT_STANCE = (10.0, -115.0)
+STRIDE = 40.0  # forward step length (peak-to-peak in x)
+FOOT_LIFT = 25.0
+HIP_LEAN = 20  # degrees
+HIP_LEAN_LEAD = math.pi / 2  # lean leads swing by this phase
 HIP_NARROW = (
-    0.0  # degrees each hip is biased inward from home; flip sign if stance widens
+    0  # degrees each hip is biased inward from home; flip sign if stance widens
 )
 
 left_ik = make_left_leg_ik()

@@ -20,11 +20,14 @@ Leg frame convention (sagittal plane):
 Fill in the CALIBRATION CONSTANTS section below before use.
 """
 
+import json
+import os
+
 import numpy as np
 
 
 # ─────────────────────────────────────────────
-#  CALIBRATION CONSTANTS  ← fill these in
+#  CALIBRATION CONSTANTS
 # ─────────────────────────────────────────────
 
 # Geometry (measure from CAD, in mm)
@@ -34,25 +37,23 @@ L2_RIGHT = 70.0  # proximal link: right servo axle → right elbow joint
 L3_LEFT = 76.963  # distal link:   left elbow joint → foot coupler
 L4_RIGHT = 86.8  # distal link:   right elbow joint → foot coupler
 
-# Servo zero-point offsets (degrees)
-# cmd = mechanical_angle + offset
-# A = rear servo (origin), B = front servo (x = +26.5mm)
-# Calibrated from: foot at (-25, -76) mm with leg straight down
+# Servo zero-point offsets and directions live in ik_calibration.json,
+# written by recalibrate_ik.py. cmd = dir * mechanical_angle + offset.
+IK_CALIBRATION_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "ik_calibration.json"
+)
 
-# Left leg
-LEFT_LEG_REAR_OFFSET = 302.93
-LEFT_LEG_FRONT_OFFSET = 178.41
+with open(IK_CALIBRATION_FILE) as _f:
+    _ik_cal = json.load(_f)
 
-RIGHT_LEG_REAR_OFFSET = 259.01
-RIGHT_LEG_FRONT_OFFSET = 172.89
-
-# Per-servo rotation direction: +1 if increasing cmd rotates link CCW in leg
-# frame, -1 if mounted reversed. Calibration locks the home point regardless,
-# but if the sign is wrong the servos drive the wrong way on any foot motion.
-LEFT_LEG_REAR_DIR = 1
-LEFT_LEG_FRONT_DIR = 1
-RIGHT_LEG_REAR_DIR = 1
-RIGHT_LEG_FRONT_DIR = 1
+LEFT_LEG_REAR_OFFSET = _ik_cal["left"]["rear_offset"]
+LEFT_LEG_FRONT_OFFSET = _ik_cal["left"]["front_offset"]
+RIGHT_LEG_REAR_OFFSET = _ik_cal["right"]["rear_offset"]
+RIGHT_LEG_FRONT_OFFSET = _ik_cal["right"]["front_offset"]
+LEFT_LEG_REAR_DIR = _ik_cal["left"]["rear_dir"]
+LEFT_LEG_FRONT_DIR = _ik_cal["left"]["front_dir"]
+RIGHT_LEG_REAR_DIR = _ik_cal["right"]["rear_dir"]
+RIGHT_LEG_FRONT_DIR = _ik_cal["right"]["front_dir"]
 
 # Default (left leg) — swap to right leg offsets when instantiating for right leg
 LEFT_SERVO_OFFSET = LEFT_LEG_REAR_OFFSET

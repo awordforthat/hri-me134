@@ -1,0 +1,22 @@
+{
+  "left": {
+    "rear_offset": 300.29,
+    "front_offset": 198.81,
+    "rear_dir": 1,
+    "front_dir": 1,
+    "home_foot": [
+      8.0,
+      -108.0
+    ]
+  },
+  "right": {
+    "rear_offset": 247.02,
+    "front_offset": 156.67,
+    "rear_dir": 1,
+    "front_dir": 1,
+    "home_foot": [
+      8.0,
+      -110.0
+    ]
+  }
+}

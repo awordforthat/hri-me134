@@ -31,6 +31,7 @@ from pylx16a.lx16a import *
 LX16A.initialize("/dev/ttyUSB0")
 
 CAL_FILE = "servo_calibration.json"
+IK_CAL_FILE = "ik_calibration.json"
 
 # name -> (servo id, axle position label, what "CCW in leg frame" looks like)
 SERVOS = [
@@ -116,11 +117,19 @@ def main():
         servo_objs[name].move_start()
         time.sleep(1.2)
 
-    print("\n=== Paste these into five_bar_ik.py ===")
-    print(f"LEFT_LEG_REAR_DIR   = {results['left_rear']}")
-    print(f"LEFT_LEG_FRONT_DIR  = {results['left_front']}")
-    print(f"RIGHT_LEG_REAR_DIR  = {results['right_rear']}")
-    print(f"RIGHT_LEG_FRONT_DIR = {results['right_front']}")
+    with open(IK_CAL_FILE) as f:
+        ik_cal = json.load(f)
+    ik_cal["left"]["rear_dir"] = results["left_rear"]
+    ik_cal["left"]["front_dir"] = results["left_front"]
+    ik_cal["right"]["rear_dir"] = results["right_rear"]
+    ik_cal["right"]["front_dir"] = results["right_front"]
+    with open(IK_CAL_FILE, "w") as f:
+        json.dump(ik_cal, f, indent=2)
+
+    print(f"\nWrote new DIRs to {IK_CAL_FILE}:")
+    print(f"  left:  rear={results['left_rear']:+d}  front={results['left_front']:+d}")
+    print(f"  right: rear={results['right_rear']:+d}  front={results['right_front']:+d}")
+    print("\nNow re-run recalibrate_ik.py to update offsets for the new DIRs.")
 
     for servo in servo_objs.values():
         servo.disable_torque()

@@ -7,16 +7,51 @@ Measure each foot's (x, z) in the leg frame:
   z = vertical offset from servo axle plane down to foot (negative, mm)
 
 Then run this script. It reads current home servo cmds from
-servo_calibration.json and computes the four offsets you need to paste into
-five_bar_ik.py.
+servo_calibration.json, computes the four offsets, and writes them to
+ik_calibration.json (loaded automatically by five_bar_ik.py — no manual edits
+needed).
 """
 
 import json
+import time
+
+from pylx16a.lx16a import LX16A, ServoTimeoutError
 
 from five_bar_ik import ServoCalibrator, make_left_leg_ik, make_right_leg_ik
 
 
 CAL_FILE = "servo_calibration.json"
+IK_CAL_FILE = "ik_calibration.json"
+
+SERVO_IDS = {
+    "left_rear": 5,
+    "left_front": 4,
+    "left_hip": 6,
+    "right_rear": 2,
+    "right_front": 3,
+    "right_hip": 1,
+}
+
+
+def move_to_home(cal, duration_ms=1500):
+    LX16A.initialize("/dev/ttyUSB0")
+    servos = {}
+    try:
+        for name, sid in SERVO_IDS.items():
+            servos[name] = LX16A(sid)
+    except ServoTimeoutError as e:
+        print(f"Servo {e.id_} not responding. Exiting.")
+        raise SystemExit(1)
+
+    print(f"Moving all servos to home pose ({duration_ms} ms)...")
+    for name, servo in servos.items():
+        target = int(max(0, min(240, cal[name]["home"])))
+        servo.move(target, duration_ms, wait=True)
+    for servo in servos.values():
+        servo.move_start()
+    time.sleep(duration_ms / 1000 + 0.5)
+    print("At home pose. Servos are holding torque.\n")
+    return servos
 
 
 def _read_float(prompt):
@@ -56,30 +91,48 @@ def main():
     print(f"  left:  rear={left_rear_cmd}  front={left_front_cmd}")
     print(f"  right: rear={right_rear_cmd}  front={right_front_cmd}")
     print()
-    print("Pose robot on flat surface, body level, both feet planted.")
-    print("Measure each foot's (x, z) in leg frame.")
-    print()
 
-    print("LEFT leg:")
-    lx, lz = prompt_xz("left")
-    print("RIGHT leg:")
-    rx, rz = prompt_xz("right")
-    print()
+    servos = move_to_home(cal)
 
-    left_offsets = ServoCalibrator(make_left_leg_ik()).calibrate_from_known_pose(
-        lx, lz, left_rear_cmd, left_front_cmd
-    )
-    right_offsets = ServoCalibrator(make_right_leg_ik()).calibrate_from_known_pose(
-        rx, rz, right_rear_cmd, right_front_cmd
-    )
-
-    if left_offsets and right_offsets:
+    try:
+        print("Pose robot on flat surface, body level, both feet planted.")
+        print("Measure each foot's (x, z) in leg frame.")
         print()
-        print("Paste these into five_bar_ik.py:")
-        print(f"  LEFT_LEG_REAR_OFFSET   = {left_offsets[0]:.2f}")
-        print(f"  LEFT_LEG_FRONT_OFFSET  = {left_offsets[1]:.2f}")
-        print(f"  RIGHT_LEG_REAR_OFFSET  = {right_offsets[0]:.2f}")
-        print(f"  RIGHT_LEG_FRONT_OFFSET = {right_offsets[1]:.2f}")
+
+        print("LEFT leg:")
+        lx, lz = prompt_xz("left")
+        print("RIGHT leg:")
+        rx, rz = prompt_xz("right")
+        print()
+
+        left_offsets = ServoCalibrator(make_left_leg_ik()).calibrate_from_known_pose(
+            lx, lz, left_rear_cmd, left_front_cmd
+        )
+        right_offsets = ServoCalibrator(make_right_leg_ik()).calibrate_from_known_pose(
+            rx, rz, right_rear_cmd, right_front_cmd
+        )
+
+        if left_offsets and right_offsets:
+            with open(IK_CAL_FILE) as f:
+                ik_cal = json.load(f)
+            ik_cal["left"]["rear_offset"] = round(left_offsets[0], 2)
+            ik_cal["left"]["front_offset"] = round(left_offsets[1], 2)
+            ik_cal["left"]["home_foot"] = [lx, lz]
+            ik_cal["right"]["rear_offset"] = round(right_offsets[0], 2)
+            ik_cal["right"]["front_offset"] = round(right_offsets[1], 2)
+            ik_cal["right"]["home_foot"] = [rx, rz]
+            with open(IK_CAL_FILE, "w") as f:
+                json.dump(ik_cal, f, indent=2)
+            print()
+            print(f"Wrote new offsets to {IK_CAL_FILE}:")
+            print(f"  left:  rear={left_offsets[0]:.2f}  front={left_offsets[1]:.2f}")
+            print(f"  right: rear={right_offsets[0]:.2f}  front={right_offsets[1]:.2f}")
+            print()
+            print("Done — five_bar_ik.py will pick these up automatically on next import.")
+            print("No manual edits required.")
+    finally:
+        for servo in servos.values():
+            servo.disable_torque()
 
 
 if __name__ == "__main__":

@@ -1,31 +1,31 @@
 {
   "left_front": {
-    "home": 127.92,
+    "home": 150.96,
     "max": 205.44,
     "min": 63.6
   },
   "left_hip": {
-    "home": 95.28,
+    "home": 97.68,
     "max": 121.68,
     "min": 65.76
   },
   "left_rear": {
-    "home": 164.4,
+    "home": 169.44,
     "max": 226.08,
     "min": 83.52
   },
   "right_front": {
-    "home": 128.16,
+    "home": 107.76,
     "max": 187.68,
     "min": 60.0
   },
   "right_hip": {
-    "home": 199.2,
+    "home": 187.44,
     "max": 201.6,
     "min": 153.12
   },
   "right_rear": {
-    "home": 136.32,
+    "home": 117.36,
     "max": 200.88,
     "min": 65.04
   }

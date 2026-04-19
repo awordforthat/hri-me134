@@ -1,0 +1,83 @@
+[
+  {
+    "servo_angles": {
+      "left_front": 159.12,
+      "left_rear": 201.84,
+      "left_hip": 94.8
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 159.12,
+      "left_rear": 201.84,
+      "left_hip": 94.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 159.12,
+      "left_rear": 201.84,
+      "left_hip": 94.32
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 159.12,
+      "left_rear": 201.84,
+      "left_hip": 94.8
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 159.12,
+      "left_rear": 201.84,
+      "left_hip": 94.8
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 159.12,
+      "left_rear": 201.84,
+      "left_hip": 94.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 158.88,
+      "left_rear": 201.84,
+      "left_hip": 94.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 159.12,
+      "left_rear": 201.84,
+      "left_hip": 94.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "left_front": 140.16,
+      "left_rear": 200.88,
+      "left_hip": 94.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  }
+]

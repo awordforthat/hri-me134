@@ -15,6 +15,14 @@
     "right_hip": 196.56,
     "right_rear": 124.8
   },
+  "left_ssw\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007fswing_right": {
+    "left_front": 136.8,
+    "left_hip": 74.88,
+    "left_rear": 204.0,
+    "right_front": 89.76,
+    "right_hip": 182.64,
+    "right_rear": 107.04
+  },
   "midpoint": {
     "left_front": 159.36,
     "left_hip": 106.56,
@@ -22,6 +30,22 @@
     "right_front": 151.44,
     "right_hip": 189.84,
     "right_rear": 102.24
+  },
+  "plant_left": {
+    "left_front": 138.24,
+    "left_hip": 101.52,
+    "left_rear": 179.52,
+    "right_front": 64.8,
+    "right_hip": 191.52,
+    "right_rear": 70.32
+  },
+  "plant_right": {
+    "left_front": 187.44,
+    "left_hip": 89.52,
+    "left_rear": 203.04,
+    "right_front": 138.0,
+    "right_hip": 190.32,
+    "right_rear": 108.72
   },
   "raise_right": {
     "left_front": 161.28,
@@ -55,6 +79,22 @@
     "right_hip": 190.32,
     "right_rear": 96.72
   },
+  "swing)\u007f_left": {
+    "left_front": 164.64,
+    "left_hip": 63.6,
+    "left_rear": 155.52,
+    "right_front": 159.12,
+    "right_hip": 184.08,
+    "right_rear": 105.84
+  },
+  "swing_left": {
+    "left_front": 164.4,
+    "left_hip": 63.6,
+    "left_rear": 155.76,
+    "right_front": 158.88,
+    "right_hip": 184.08,
+    "right_rear": 105.6
+  },
   "swing_left_start": {
     "left_front": 144.72,
     "left_hip": 109.2,
@@ -62,6 +102,14 @@
     "right_front": 191.28,
     "right_hip": 202.8,
     "right_rear": 118.8
+  },
+  "swing_right": {
+    "left_front": 137.04,
+    "left_hip": 74.88,
+    "left_rear": 204.0,
+    "right_front": 89.76,
+    "right_hip": 182.64,
+    "right_rear": 107.28
   },
   "tall": {
     "left_front": 163.2,

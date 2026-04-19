@@ -82,19 +82,29 @@ def start_servos(ids=[1, 2, 3, 4, 5, 6]):
 
 
 TIME_STEP = 0.02
-GAIT_SPEED = 3
+GAIT_SPEED = 4
 GAIT_PERIOD = 6.0 / GAIT_SPEED  # seconds per full cycle; 2s at speed=3
 
 # Shared nominal stance (x, z) in leg frame. Both legs target the same.
-LEFT_STANCE = (15, -105)
-RIGHT_STANCE = (10.0, -115.0)
-STRIDE = 40.0  # forward step length (peak-to-peak in x)
+LEFT_STANCE = (15, -95)  # half ellipse: 15/-105
+RIGHT_STANCE = (10.0, -115.0)  # half ellipse: 10/-115
+STRIDE = 35.0  # forward step length (peak-to-peak in x)
 FOOT_LIFT = 25.0
-HIP_LEAN = 20  # degrees
-HIP_LEAN_LEAD = math.pi / 2  # lean leads swing by this phase
+HIP_LEAN = 15  # degrees
+HIP_LEAN_LEAD = math.pi  # lean leads swing by this phase
 HIP_NARROW = (
-    0  # degrees each hip is biased inward from home; flip sign if stance widens
+    5  # degrees each hip is biased inward from home; flip sign if stance widens
 )
+
+# Foot trajectory shape. Options:
+#   "half_ellipse" — flat stance, half-sine swing lift (no dig-in)
+#   "full_ellipse" — full-sine z so foot digs below z0 during stance push
+#   "trapezoidal"  — lift straight up, translate at height, drop straight down
+GAIT_PATTERN = "trapezoidal"
+
+# For trapezoidal: fraction of swing spent lifting and dropping (each).
+# e.g. 0.2 → lift 20%, flat 60%, drop 20%.
+TRAP_EDGE_FRAC = 0.2
 
 left_ik = make_left_leg_ik()
 right_ik = make_right_leg_ik()
@@ -108,11 +118,32 @@ t = 0
 def foot_xz(phase, stance):
     """Foot (x, z) for a given phase, using the leg's own nominal stance."""
     x0, z0 = stance
-    # Stance (sin≤0): foot moves backward in leg frame → pushes body forward.
-    # Swing (sin>0): foot moves forward in leg frame → resets for next step.
+    # Stance (cos > 0 half): foot moves backward in leg frame → pushes body forward.
+    # Swing (cos < 0 half): foot moves forward in leg frame → resets for next step.
     x = x0 - (STRIDE / 2) * math.cos(phase)
-    lift = FOOT_LIFT * max(0.0, math.sin(phase))
-    return x, z0 + lift
+    if GAIT_PATTERN == "half_ellipse":
+        # Lift only during swing; foot stays at z0 during stance.
+        dz = FOOT_LIFT * max(0.0, math.sin(phase))
+    elif GAIT_PATTERN == "full_ellipse":
+        # Full sine: foot rises during swing, digs below z0 during stance push.
+        dz = FOOT_LIFT * math.sin(phase)
+    elif GAIT_PATTERN == "trapezoidal":
+        # Swing = first half of cycle (sin > 0). Split into lift/flat/drop.
+        cycle = (phase / (2 * math.pi)) % 1.0
+        if cycle >= 0.5:
+            dz = 0.0  # stance
+        else:
+            s = cycle / 0.5  # 0..1 across swing
+            edge = max(1e-6, TRAP_EDGE_FRAC)
+            if s < edge:
+                dz = FOOT_LIFT * (s / edge)
+            elif s > 1 - edge:
+                dz = FOOT_LIFT * ((1 - s) / edge)
+            else:
+                dz = FOOT_LIFT
+    else:
+        raise ValueError(f"unknown GAIT_PATTERN: {GAIT_PATTERN!r}")
+    return x, z0 + dz
 
 
 def gait_tick(t):

@@ -1,0 +1,83 @@
+[
+  {
+    "servo_angles": {
+      "right_front": 133.68,
+      "right_rear": 100.8,
+      "right_hip": 187.32
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "right_front": 133.68,
+      "right_rear": 100.8,
+      "right_hip": 187.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "right_front": 133.68,
+      "right_rear": 100.8,
+      "right_hip": 187.8
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "right_front": 133.68,
+      "right_rear": 100.8,
+      "right_hip": 187.32
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "right_front": 133.68,
+      "right_rear": 100.8,
+      "right_hip": 187.32
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "right_front": 133.68,
+      "right_rear": 100.8,
+      "right_hip": 187.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "right_front": 133.92,
+      "right_rear": 100.8,
+      "right_hip": 187.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "right_front": 133.68,
+      "right_rear": 100.8,
+      "right_hip": 187.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  },
+  {
+    "servo_angles": {
+      "right_front": 152.64,
+      "right_rear": 101.76,
+      "right_hip": 187.56
+    },
+    "max_duration": 1000,
+    "ease": "linear"
+  }
+]

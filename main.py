@@ -86,21 +86,21 @@ GAIT_SPEED = 4
 GAIT_PERIOD = 6.0 / GAIT_SPEED  # seconds per full cycle; 2s at speed=3
 
 # Shared nominal stance (x, z) in leg frame. Both legs target the same.
-LEFT_STANCE = (15, -95)  # half ellipse: 15/-105
-RIGHT_STANCE = (10.0, -115.0)  # half ellipse: 10/-115
-STRIDE = 35.0  # forward step length (peak-to-peak in x)
-FOOT_LIFT = 25.0
+LEFT_STANCE = (15, -100)  # half ellipse: 15/-105
+RIGHT_STANCE = (15.0, -110)  # half ellipse: 10/-115
+STRIDE = 20.0  # forward step length (peak-to-peak in x)
+FOOT_LIFT = 3.0
 HIP_LEAN = 15  # degrees
-HIP_LEAN_LEAD = math.pi  # lean leads swing by this phase
+HIP_LEAN_LEAD = math.pi / 4  # lean leads swing by this phase
 HIP_NARROW = (
-    5  # degrees each hip is biased inward from home; flip sign if stance widens
+    0  # degrees each hip is biased inward from home; flip sign if stance widens
 )
 
 # Foot trajectory shape. Options:
 #   "half_ellipse" — flat stance, half-sine swing lift (no dig-in)
 #   "full_ellipse" — full-sine z so foot digs below z0 during stance push
 #   "trapezoidal"  — lift straight up, translate at height, drop straight down
-GAIT_PATTERN = "trapezoidal"
+GAIT_PATTERN = "half_ellipse"
 
 # For trapezoidal: fraction of swing spent lifting and dropping (each).
 # e.g. 0.2 → lift 20%, flat 60%, drop 20%.
@@ -152,6 +152,8 @@ def gait_tick(t):
 
     lx, lz = foot_xz(phase_l, LEFT_STANCE)
     rx, rz = foot_xz(phase_r, RIGHT_STANCE)
+    # DEBUG: right leg's x-direction is inverted — reflect around stance center
+    rx = 2 * RIGHT_STANCE[0] - rx
 
     left_sol = left_ik.solve(lx, lz)
     right_sol = right_ik.solve(rx, rz)
@@ -164,7 +166,12 @@ def gait_tick(t):
     r_rear_cmd, r_front_cmd = right_sol
 
     if int(t / TIME_STEP) % 10 == 0:
-        print(f"t={t:5.2f}  L=({lx:+5.1f},{lz:+6.1f})  R=({rx:+5.1f},{rz:+6.1f})")
+        phase_deg = int(math.degrees(phase_l)) % 360
+        print(
+            f"t={t:5.2f} phase={phase_deg:4d} "
+            f"L=({lx:+5.1f},{lz:+6.1f}) rear={l_rear_cmd:6.1f} front={l_front_cmd:6.1f} "
+            f"R=({rx:+5.1f},{rz:+6.1f}) rear={r_rear_cmd:6.1f} front={r_front_cmd:6.1f}"
+        )
 
     # Lean toward stance leg: sin(phase_l)>0 means left swing → weight right → hips shift right (minus)
     lean = HIP_LEAN * math.sin(phase_l - HIP_LEAN_LEAD)
